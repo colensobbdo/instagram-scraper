@@ -15,18 +15,35 @@ const { GRAPHQL_ENDPOINT, ABORT_RESOURCE_TYPES, ABORT_RESOURCE_URL_INCLUDES, SCR
 const errors = require('./errors');
 const { login, loginManager } = require('./login');
 
+const isDevelopment = !process.env.NODE_ENV || process.env.NODE_ENV === 'development';
+
 const { sleep, log } = Apify.utils;
 
 Apify.main(async () => {
-    /** @type {any} */
-    const input = await Apify.getInput();
+    const input = !isDevelopment ? await Apify.getInput() : {
+        hashtag: '#cancelculture',
+        searchType: 'hashtag',
+        resultsType: SCRAPE_TYPES.POSTS,
+        resultsLimit: 10,
+        proxy: {
+            useApifyProxy: false,
+            // useApifyProxy: true,
+            // apifyProxyGroups: [
+            //     'RESIDENTIAL'
+            // ],
+        },
+        languageCode: 'en',
+        countryCode: 'nz',
+        trendKey: 'goodindex',
+        debug: true,
+    };
+
     const {
         proxy,
         resultsType,
         resultsLimit = 200,
         scrapePostsUntilDate,
         scrollWaitSecs = 15,
-        pageTimeout = 60,
         maxRequestRetries,
         loginCookies,
         directUrls = [],
@@ -35,7 +52,7 @@ Apify.main(async () => {
         loginPassword,
         useStealth = false,
         useChrome,
-        debugLog = false,
+        debug: debugLog = false,
         includeHasStories = false,
         cookiesPerConcurrency = 1,
         blockMoreAssets = false,
@@ -45,6 +62,7 @@ Apify.main(async () => {
     if (debugLog) {
         log.setLevel(log.LEVELS.DEBUG);
     }
+    log.info('task input', input);
 
     // We have to keep a state of posts/comments we already scraped so we don't push duplicates
     // TODO: Cleanup individual users/posts after all posts/comments are pushed
@@ -127,8 +145,18 @@ Apify.main(async () => {
     const requestListSources = urls.map((url) => ({
         url,
         userData: {
+            limit: resultsLimit,
             // TODO: This should be the only page type we ever need, remove the one from entryData
             pageType: getPageTypeFromUrl(url),
+            data: {
+                hashtag: input.search,
+                languageCode: input.languageCode,
+                trendKey: input.trendKey,
+                // not supported at the moment
+                countryCode: input.countryCode,
+                // crawler type
+                crawler: 'instagram',
+            },
         },
     }));
 
@@ -149,9 +177,12 @@ Apify.main(async () => {
 
     helpers.patchInput(input);
 
+    const outputData = [];
+
     const extendOutputFunction = await extendFunction({
         output: async (data) => {
-            await Apify.pushData(data);
+            outputData.push(data);
+            // await Apify.pushData([data]);
         },
         input,
         key: 'extendOutputFunction',
@@ -356,6 +387,7 @@ Apify.main(async () => {
                             case SCRAPE_TYPES.POSTS:
                                 await handlePostsGraphQLResponse({
                                     page,
+                                    request,
                                     response,
                                     scrollingState,
                                     extendOutputFunction,
@@ -364,6 +396,7 @@ Apify.main(async () => {
                             case SCRAPE_TYPES.COMMENTS:
                                 await handleCommentsGraphQLResponse({
                                     page,
+                                    request,
                                     response,
                                     scrollingState,
                                     extendOutputFunction,
@@ -380,6 +413,7 @@ Apify.main(async () => {
                                 await scrapePosts({
                                     additionalData: {},
                                     entryData,
+                                    request,
                                     page,
                                     itemSpec: page.itemSpec,
                                     extendOutputFunction,
@@ -547,7 +581,6 @@ Apify.main(async () => {
             itemSpec.input = input;
             itemSpec.scrollWaitSecs = scrollWaitSecs;
 
-
             if (request.userData.label === 'postDetail') {
                 const result = scrapePost(request, itemSpec, entryData, additionalData);
 
@@ -561,6 +594,7 @@ Apify.main(async () => {
                         case SCRAPE_TYPES.POSTS:
                             await scrapePosts({
                                 page,
+                                request,
                                 itemSpec,
                                 additionalData,
                                 entryData,
@@ -574,6 +608,7 @@ Apify.main(async () => {
                         case SCRAPE_TYPES.COMMENTS:
                             await scrapeComments({
                                 page,
+                                request,
                                 additionalData,
                                 itemSpec,
                                 entryData,
@@ -638,6 +673,12 @@ Apify.main(async () => {
     }
 
     await crawler.run();
+
+    log.info(`[${outputData.length}] posts crawled`);
+
+    if (outputData) {
+        await Apify.pushData(outputData);
+    }
 
     await extendScraperFunction(undefined, {
         label: 'FINISH',

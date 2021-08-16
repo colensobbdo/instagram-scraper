@@ -1,5 +1,8 @@
 {
     "comments": {
+        "countryCode": "nz",
+        "languageCode": "en",
+        "trendKey": "goodindex",
         "search": "epica",
         "searchType": "hashtag",
         "searchLimit": 10,
@@ -16,9 +19,13 @@
             "apifyProxyGroups": [
                 "RESIDENTIAL"
             ]
-        }
+        },
+        "debug": true
     },
     "posts": {
+        "countryCode": "nz",
+        "languageCode": "en",
+        "trendKey": "goodindex",
         "search": "epica",
         "searchType": "hashtag",
         "searchLimit": 10,
@@ -33,10 +40,14 @@
             "apifyProxyGroups": [
                 "RESIDENTIAL"
             ]
-        }
+        },
+        "debug": true
     },
     "hashtagExpand": {
-        "search": "epica",
+        "countryCode": "nz",
+        "languageCode": "en",
+        "trendKey": "goodindex",
+        "search": "#goodindex",
         "searchType": "hashtag",
         "searchLimit": 2,
         "resultsType": "posts",
@@ -50,6 +61,7 @@
                 "RESIDENTIAL"
             ]
         },
-        "expandOwners": true
+        "expandOwners": true,
+        "debug": true
     }
 }

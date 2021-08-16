@@ -104,6 +104,7 @@ const scrapePost = (request, itemSpec, entryData, additionalData) => {
     })();
 
     return {
+        ...(request.userData.data || {}),
         '#debug': {
             ...Apify.utils.createRequestDebugInfo(request),
             ...itemSpec,
@@ -136,7 +137,7 @@ const scrapePost = (request, itemSpec, entryData, additionalData) => {
  *   fromResponse: boolean,
  * }} params
  */
-const scrapePosts = async ({ page, itemSpec, requestQueue, entryData, fromResponse = false, scrollingState, extendOutputFunction, additionalData, resultsType }) => {
+const scrapePosts = async ({ page, request, itemSpec, requestQueue, entryData, fromResponse = false, scrollingState, extendOutputFunction, additionalData, resultsType }) => {
     const timeline = getPostsFromEntryData(itemSpec.pageType, entryData);
 
     if (!timeline) {
@@ -223,7 +224,7 @@ const scrapePosts = async ({ page, itemSpec, requestQueue, entryData, fromRespon
             const postsReadyToPush = await filterPushedItemsAndUpdateState({
                 items: timeline.posts,
                 itemSpec,
-                parsingFn: parsePostsForOutput,
+                parsingFn: parsePostsForOutput(request),
                 scrollingState,
                 type: 'posts',
                 page,
@@ -310,7 +311,7 @@ const scrapePosts = async ({ page, itemSpec, requestQueue, entryData, fromRespon
  *   extendOutputFunction: (data: any, meta: any) => Promise<void>,
  * }} params
  */
-async function handlePostsGraphQLResponse({ page, response, scrollingState, extendOutputFunction }) {
+async function handlePostsGraphQLResponse({ page, request, response, scrollingState, extendOutputFunction }) {
     const responseUrl = response.url();
 
     const { itemSpec } = page;
@@ -338,7 +339,7 @@ async function handlePostsGraphQLResponse({ page, response, scrollingState, exte
     const postsReadyToPush = await filterPushedItemsAndUpdateState({
         items: timeline.posts,
         itemSpec,
-        parsingFn: parsePostsForOutput,
+        parsingFn: parsePostsForOutput(request),
         scrollingState,
         type: 'posts',
         page,
@@ -355,26 +356,29 @@ async function handlePostsGraphQLResponse({ page, response, scrollingState, exte
     });
 }
 
-function parsePostsForOutput(posts, itemSpec, currentScrollingPosition) {
-    return posts.map((item, index) => ({
-        '#debug': {
-            ...itemSpec,
-            shortcode:
-                item?.node?.shortcode
-                ?? item?.code,
-            postLocationId: item?.node?.location?.id
-                ?? item?.location?.pk
-                ?? null,
-            postOwnerId: item?.node?.owner?.id
-                ?? item?.user?.pk
-                ?? null,
-        },
-        queryTag: itemSpec.tagName,
-        queryUsername: itemSpec.userUsername,
-        queryLocation: itemSpec.locationName,
-        position: currentScrollingPosition + 1 + index,
-        ...formatSinglePost(item.node),
-    }));
+function parsePostsForOutput(request) {
+    return (posts, itemSpec, currentScrollingPosition) => {
+        return posts.map((item, index) => ({
+            ...(request.userData.data || {}),
+            '#debug': {
+                ...itemSpec,
+                shortcode:
+                    item?.node?.shortcode
+                    ?? item?.code,
+                postLocationId: item?.node?.location?.id
+                    ?? item?.location?.pk
+                    ?? null,
+                postOwnerId: item?.node?.owner?.id
+                    ?? item?.user?.pk
+                    ?? null,
+            },
+            queryTag: itemSpec.tagName,
+            queryUsername: itemSpec.userUsername,
+            queryLocation: itemSpec.locationName,
+            position: currentScrollingPosition + 1 + index,
+            ...formatSinglePost(item.node),
+        }));
+    };
 }
 
 /**

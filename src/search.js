@@ -1,4 +1,5 @@
 const Apify = require('apify');
+const _ = require('lodash');
 const { SEARCH_TYPES, PAGE_TYPES } = require('./consts');
 const errors = require('./errors');
 
@@ -9,13 +10,25 @@ const formatPlaceResult = (item) => `https://www.instagram.com/explore/locations
 const formatUserResult = (item) => `https://www.instagram.com/${item.user.username}/`;
 const formatHashtagResult = (item) => `https://www.instagram.com/explore/tags/${item.hashtag.name}/`;
 
+// https://support.perspectiveapi.com/s/about-the-api-attributes-and-languages
+// https://www.loc.gov/standards/iso639-2/php/code_list.php
+const SUPPORTED_LANGUAGES = [
+    'en', // English (en)
+    'es', // Spanish (es)
+    'fr', // French (fr)
+    'de', // German (de)
+    'pt', // Portuguese (pt)
+    'it', // Italian (it)
+    'ru', // Russian (ru)
+];
+
 /**
  * Attempts to query Instagram search and parse found results into direct links to instagram pages
  * @param {any} input Input loaded from Apify.getInput();
  * @param {(params: { url: string }) => Promise<any>} request
  */
 const searchUrls = async (input, request, retries = 0) => {
-    const { search, searchType, searchLimit = 10 } = input;
+    const { hashtag: search, searchType, searchLimit = 1 } = input;
     if (!search) return [];
 
     try {
@@ -32,20 +45,74 @@ const searchUrls = async (input, request, retries = 0) => {
 
     log.info(`Searching for "${search}"`);
 
-    const searchUrl = `https://www.instagram.com/web/search/topsearch/?context=${searchType}&query=${encodeURIComponent(search)}`;
-    const { body } = await (async () => {
-        try {
-            return await request({
-                url: searchUrl,
-            });
-        } catch (e) {
-            log.debug('Search', { searchUrl, message: e.message });
+    // check if the language is supported by Perspective API
+    let hl = _.toLower(input.languageCode);
 
-            return {
-                body: null,
-            };
-        }
-    })();
+    // try to decode the 3-char encoding to 2-char one
+    if (_(SUPPORTED_LANGUAGES).indexOf(hl) === -1) {
+        hl = _.get(SUPPORTED_LANGUAGES, hl);
+    }
+
+    // defaults to en
+    if (_.isEmpty(hl)) {
+        hl = "en";
+    }
+
+    // const searchUrl = `https://www.instagram.com/web/search/topsearch/?context=${searchType}&query=${encodeURIComponent(search)}`;
+
+    const url = new URL("https://www.instagram.com/web/search/topsearch/");
+    const params = new URLSearchParams();
+
+    params.append("context", searchType);
+    params.append("query", search);
+
+    // load posts in a particular language
+    if (!_.isEmpty(hl)) {
+        params.append("hl", hl);
+    }
+
+    // inject those query string parameters
+    url.search = params.toString();
+
+    const searchUrl = url.href;
+    log.info(`instagram search start URL: ${searchUrl}`);
+
+    let body;
+
+    // const { body } = await (async () => {
+    //     try {
+    //         return await request({
+    //             url: searchUrl,
+    //         });
+    //     } catch (e) {
+    //         log.debug('Search', { searchUrl, message: e.message });
+
+    //         return {
+    //             body: null,
+    //         };
+    //     }
+    // })();
+
+    const requestList = await Apify.openRequestList('start-urls', [
+        searchUrl,
+    ]);
+
+    // Proxy connection is automatically established in the Crawler
+    const proxyConfiguration = await Apify.createProxyConfiguration(input.proxy);
+
+    const crawler = new Apify.PuppeteerCrawler({
+        requestList,
+        proxyConfiguration,
+        handlePageFunction: async ({ page }) => {
+            body = await page.evaluate(() => {
+                return JSON.parse(document.querySelector('body').innerText);
+            });
+        },
+    });
+
+    console.log('Running Puppeteer script...');
+    await crawler.run();
+    console.log('Puppeteer closed.');
 
     log.debug('Response', { body });
 
@@ -63,7 +130,14 @@ const searchUrls = async (input, request, retries = 0) => {
     let urls = [];
     if (searchType === SEARCH_TYPES.USER) urls = body.users.map(formatUserResult);
     else if (searchType === SEARCH_TYPES.PLACE) urls = body.places.map(formatPlaceResult);
-    else if (searchType === SEARCH_TYPES.HASHTAG) urls = body.hashtags.map(formatHashtagResult);
+    else if (searchType === SEARCH_TYPES.HASHTAG) urls = _(body.hashtags)
+        .filter({
+            hashtag: {
+                name: _.trim(search, '#')
+            }
+        })
+        .map(formatHashtagResult)
+        .value();
 
     log.info(`Found ${urls.length} search results. Limiting to ${searchLimit}.`);
     urls = urls.slice(0, searchLimit);

@@ -5,14 +5,15 @@
     "main": "main.js",
     "dependencies": {
         "apify": "^2.0.2",
-        "lodash": "^4.17.21",
         "header-generator": "^1.1.0",
+        "lodash": "^4.17.21",
         "puppeteer": "*"
     },
     "scripts": {
         "start": "node src/main.js",
         "test": "echo \"Error: no test specified\" && exit 1",
-        "lint": "eslint ./src/*.js"
+        "lint": "eslint ./src/*.js",
+        "dev": "clear; apify run --purge"
     },
     "repository": {
         "type": "git",

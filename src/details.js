@@ -1,5 +1,7 @@
 const Apify = require('apify');
 const Puppeteer = require('puppeteer'); // eslint-disable-line no-unused-vars
+const _ = require('lodash');
+
 const { log, parseCaption, singleQuery } = require('./helpers');
 const { PAGE_TYPES } = require('./consts');
 const { getPostLikes } = require('./likes');
@@ -19,7 +21,7 @@ const formatIGTVVideo = (edge) => {
         commentsDisabled: node.comments_disabled,
         dimensionsHeight: node.dimensions.height,
         dimensionsWidth: node.dimensions.width,
-        displayUrl: node.display_url,
+        image: node.display_url,
         likesCount: node.edge_liked_by ? node.edge_liked_by.count : null,
         videoDuration: node.video_duration || 0,
         videoViewCount: node.video_view_count,
@@ -47,25 +49,27 @@ const formatSinglePost = (node) => {
     const likes = node.edge_liked_by || node.edge_media_preview_like;
     const caption = (node.edge_media_to_caption && node.edge_media_to_caption.edges.length) ? node.edge_media_to_caption.edges[0].node.text : '';
     const { hashtags, mentions } = parseCaption(caption);
+
     return {
         // eslint-disable-next-line no-nested-ternary
         type: node.__typename ? node.__typename.replace('Graph', '') : (node.is_video ? 'Video' : 'Image'),
         shortCode: node.shortcode,
-        caption,
+        text: caption,
         hashtags,
         mentions,
         url: `https://www.instagram.com/p/${node.shortcode}`,
         commentsCount: comments ? comments.count : null,
-        latestComments: comments && comments.edges ? comments.edges.map((edge) => ({
+        comments: _.map(_.get(node, 'edge_media_to_caption.edges'), (edge) => ({
             ownerUsername: edge.node.owner ? edge.node.owner.username : '',
             text: edge.node.text,
-        })).reverse() : [],
+        })).reverse(),
         dimensionsHeight: node.dimensions.height,
         dimensionsWidth: node.dimensions.width,
-        displayUrl: node.display_url,
+        image: node.display_url,
         images: sidecarImages(node),
         videoUrl: node.video_url,
         id: node.id,
+        postId: node.shortcode,
         firstComment: comments && comments.edges && comments.edges[0] && comments.edges[0].node.text,
         alt: node.accessibility_caption,
         likesCount: likes ? likes.count : null,

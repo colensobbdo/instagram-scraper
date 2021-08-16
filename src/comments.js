@@ -40,7 +40,7 @@ const getCommentsFromGraphQL = ({ data }) => {
  *   extendOutputFunction: (data: any, meta: any) => Promise<void>
  * }} params
  */
-const scrapeComments = async ({ page, itemSpec, entryData, additionalData, scrollingState, extendOutputFunction }) => {
+const scrapeComments = async ({ page, request, itemSpec, entryData, additionalData, scrollingState, extendOutputFunction }) => {
     // Check that current page is of a type which has comments
     if (itemSpec.pageType !== PAGE_TYPES.POST) throw errors.notPostPage();
 
@@ -59,7 +59,7 @@ const scrapeComments = async ({ page, itemSpec, entryData, additionalData, scrol
         const commentsReadyToPush = await filterPushedItemsAndUpdateState({
             items: timeline.comments,
             itemSpec,
-            parsingFn: parseCommentsForOutput,
+            parsingFn: parseCommentsForOutput(request),
             scrollingState,
             page,
             type: 'comments',
@@ -99,7 +99,7 @@ const scrapeComments = async ({ page, itemSpec, entryData, additionalData, scrol
  *   extendOutputFunction: (data: any, meta: any) => Promise<void>,
  * }} params
  */
-async function handleCommentsGraphQLResponse({ page, response, scrollingState, extendOutputFunction }) {
+async function handleCommentsGraphQLResponse({ page, request, response, scrollingState, extendOutputFunction }) {
     const responseUrl = response.url();
     const { itemSpec } = page;
 
@@ -129,7 +129,7 @@ async function handleCommentsGraphQLResponse({ page, response, scrollingState, e
     const commentsReadyToPush = await filterPushedItemsAndUpdateState({
         items: timeline.comments,
         itemSpec,
-        parsingFn: parseCommentsForOutput,
+        parsingFn: parseCommentsForOutput(request),
         scrollingState,
         page,
         type: 'comments',
@@ -143,23 +143,26 @@ async function handleCommentsGraphQLResponse({ page, response, scrollingState, e
     });
 }
 
-function parseCommentsForOutput(comments, itemSpec, currentScrollingPosition) {
-    return comments.map((item, index) => ({
-        '#debug': {
-            index: index + currentScrollingPosition + 1,
-            // ...Apify.utils.createRequestDebugInfo(request),
-            ...itemSpec,
-        },
-        id: item.node.id,
-        postId: itemSpec.id,
-        text: item.node.text,
-        position: index + currentScrollingPosition + 1,
-        timestamp: new Date(parseInt(item.node.created_at, 10) * 1000),
-        ownerId: item.node.owner ? item.node.owner.id : null,
-        ownerIsVerified: item.node.owner ? item.node.owner.is_verified : null,
-        ownerUsername: item.node.owner ? item.node.owner.username : null,
-        ownerProfilePicUrl: item.node.owner ? item.node.owner.profile_pic_url : null,
-    }));
+function parseCommentsForOutput(request) {
+    return (comments, itemSpec, currentScrollingPosition) => {
+        return comments.map((item, index) => ({
+            '#debug': {
+                index: index + currentScrollingPosition + 1,
+                ...(request.userData.data || {}),
+                ...Apify.utils.createRequestDebugInfo(request),
+                ...itemSpec,
+            },
+            id: item.node.id,
+            postId: itemSpec.id,
+            text: item.node.text,
+            position: index + currentScrollingPosition + 1,
+            timestamp: new Date(parseInt(item.node.created_at, 10) * 1000),
+            ownerId: item.node.owner ? item.node.owner.id : null,
+            ownerIsVerified: item.node.owner ? item.node.owner.is_verified : null,
+            ownerUsername: item.node.owner ? item.node.owner.username : null,
+            ownerProfilePicUrl: item.node.owner ? item.node.owner.profile_pic_url : null,
+        }));
+    };
 }
 
 module.exports = {
