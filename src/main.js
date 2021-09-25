@@ -1,5 +1,6 @@
 const Apify = require('apify');
 const HeaderGenerator = require('header-generator');
+const _ = require('lodash');
 
 const { resourceCache } = require('./resource-cache');
 const { scrapePosts, handlePostsGraphQLResponse, scrapePost, createAddPost } = require('./posts');
@@ -39,6 +40,7 @@ Apify.main(async () => {
     };
 
     const {
+        countryCode,
         proxy,
         resultsType,
         resultsLimit = 200,
@@ -85,7 +87,10 @@ Apify.main(async () => {
     }
 
     const proxyConfiguration = await helpers.proxyConfiguration({
-        proxyConfig: proxy,
+        proxyConfig: {
+            ...proxy,
+            countryCode: _.toUpper(countryCode).substring(0, 2),
+        },
         hint: ['RESIDENTIAL'],
     });
 
